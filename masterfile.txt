@@ -1,0 +1,5 @@
+; Archivo de zona maestra de ejemplo
+; Comentarios comienzan con punto y coma
+
+javeriana.edu.co   IN  A  10.26.1.144
+gobiernobogota.gov.co  IN  A   52.232.179.209
