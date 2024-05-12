@@ -22,10 +22,16 @@ public class DNSReceiver {
                 Mensaje reqDNS = processDNSResponse(response, packet.getLength());
 
                 // Agregar respuesta DNS
-                byte[] dnsResponse = generateDNSResponse(response, packet.getLength(), reqDNS);
                 InetAddress clientAddress = packet.getAddress();
                 int clientPort = packet.getPort();
-                sendDNSResponse(dnsResponse, clientAddress, clientPort, socket);
+
+                byte[] dnsResponse = generateDNSResponse(response, packet.getLength(), reqDNS);
+                if (dnsResponse != null ){
+                    sendDNSResponse(dnsResponse, clientAddress, clientPort, socket);
+                }else{
+                    resolutorForaneo(response,clientAddress, clientPort, socket);
+                }
+
             }
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -249,10 +255,16 @@ public class DNSReceiver {
         //Escribir respuesta
         Map<String, String> dnsRR = loadDNSRecords(); //Obtener lista con los dominios y sus direcciones ip
         dnsRR.forEach((dominio, ipAddress) -> System.out.println(dominio + " -> " + ipAddress));
-        escribirRR( respuestaIn, reqDNS.getQNAME(),reqDNS.getQTYPE(), dnsRR);
+        boolean noEnc = escribirRR( respuestaIn, reqDNS.getQNAME(),reqDNS.getQTYPE(), dnsRR);
 
+        if(!noEnc){
+            System.out.println("hay RR del nombre de dominio colocado por el usuario en el MASTERFILE");
+            return respuesta.toByteArray();
+        }else{
+            System.out.println("no hay RR del nombre de dominio colocado por el usuario en el MASTERFILE");
+            return null;
+        }
 
-        return respuesta.toByteArray();
     }
 
     public static void escribirPregunta(DataOutputStream dataOutputStream, String queryDomain) throws Exception {
@@ -266,13 +278,16 @@ public class DNSReceiver {
         dataOutputStream.writeByte(0); //Final de QNAME
     }
 
-    private static void escribirRR(DataOutputStream dataOutputStream, String qname, short qtype, Map<String, String> masterFileRecords) throws Exception {
+    private static boolean escribirRR(DataOutputStream dataOutputStream, String qname, short qtype, Map<String, String> masterFileRecords) throws Exception {
+        boolean noEncontrado = true;
+
         for (Map.Entry<String, String> entry : masterFileRecords.entrySet()) {
             String dominio = entry.getKey();
             String dirIP = entry.getValue();
 
             // Check if the query domain matches the domain in the master file
             if (dominio.equalsIgnoreCase(qname)) {
+                noEncontrado = false;
                 // Write the dominio name
                 dataOutputStream.writeShort((short) 0xC000 | 12); //Se escribe un apuntador al nombre de dominio
 
@@ -300,10 +315,10 @@ public class DNSReceiver {
 
                 // Escribir la matriz de bytes que representa la dirección IP en el flujo de salida
                 dataOutputStream.write(ipBytes);
-            }else{
-                
             }
         }
+
+        return noEncontrado;
     }
 
     public static void sendDNSResponse(byte[] responseData, InetAddress clientAddress, int clientPort, DatagramSocket socket) {
@@ -315,6 +330,31 @@ public class DNSReceiver {
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
+
+    public static void resolutorForaneo(byte[] msgRequest, InetAddress clientAddress, int clientPort, DatagramSocket socketUDP){
+        byte[] repuestaResolutor;
+        try (DatagramSocket socket = new DatagramSocket()) {
+            System.out.println("Enviando consulta a servidor DNS externo...");
+            InetAddress ipAddress = InetAddress.getByName("10.2.1.10");
+            DatagramPacket dnsReqPacket = new DatagramPacket(msgRequest, msgRequest.length, ipAddress, 53);
+            socket.send(dnsReqPacket);
+
+            repuestaResolutor = new byte[1024];
+            DatagramPacket respDatagrama = new DatagramPacket(repuestaResolutor, repuestaResolutor.length);
+            socket.receive(respDatagrama);
+            System.out.println("consulta recibida!!!!");
+            processDNSResponse(repuestaResolutor, repuestaResolutor.length);
+
+           DatagramPacket respHost = new DatagramPacket(respDatagrama.getData(), respDatagrama.getLength(), clientAddress, clientPort);
+           socketUDP.send(respHost);
+           System.out.println("respuesta enviada al HOST");
+
+
+        }catch(IOException e){
+            e.printStackTrace();
+        }
+
     }
 
 }
