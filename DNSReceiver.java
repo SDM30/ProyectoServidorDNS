@@ -190,8 +190,8 @@ public class DNSReceiver {
                     System.out.println("It's a label");
                 }
 
-                firstBytes = dataInputStream.readByte();
-                firstTwoBits = (firstBytes & 0b11000000) >>> 6;
+                //firstBytes = dataInputStream.readByte();
+                //firstTwoBits = (firstBytes & 0b11000000) >>> 6;
             }
 
             domainToIp.forEach((key, value) -> System.out.println(key + " : " + value));
@@ -274,7 +274,7 @@ public class DNSReceiver {
             // Check if the query domain matches the domain in the master file
             if (dominio.equalsIgnoreCase(qname)) {
                 // Write the dominio name
-                escribirPregunta(dataOutputStream, dominio);
+                dataOutputStream.writeShort((short) 0xC000 | 12); //Se escribe un apuntador al nombre de dominio
 
                 // Write the type and class
                 dataOutputStream.writeShort(qtype);
