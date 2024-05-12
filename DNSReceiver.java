@@ -32,7 +32,6 @@ public class DNSReceiver {
         }
     }
 
-
     public static Mensaje processDNSResponse(byte[] resp, int tam) {
 
         Mensaje reqDNS = new Mensaje(resp, tam);
@@ -103,7 +102,6 @@ public class DNSReceiver {
             System.out.println("Authority RRs: " + String.format("%s", NSCOUNT));
             System.out.println("Additional RRs: " + String.format("%s", ARCOUNT));
 
-            //PREGUNTA
             String QNAME = "";
             int recLen;
             while ((recLen = dataInputStream.readByte()) > 0) {
@@ -111,15 +109,17 @@ public class DNSReceiver {
                 for (int i = 0; i < recLen; i++) {
                     record[i] = dataInputStream.readByte();
                 }
-                //Se coloca el tamaño
-                QNAME+= recLen;
-                //Se coloca el nombre
+                if (!QNAME.isEmpty()) {
+                    QNAME += ".";
+                }
+                // Se agrega el nombre al QNAME
                 QNAME += new String(record, StandardCharsets.UTF_8);
             }
-            QNAME+= recLen;
             reqDNS.setQNAME(QNAME);
             short QTYPE = dataInputStream.readShort();
+            reqDNS.setQTYPE(QTYPE);
             short QCLASS = dataInputStream.readShort();
+            reqDNS.setQCLASS(QCLASS);
             System.out.println("Record: " + QNAME);
             System.out.println("Record Type: " + String.format("%s", QTYPE));
             System.out.println("Class: " + String.format("%s", QCLASS));
@@ -202,6 +202,29 @@ public class DNSReceiver {
         return reqDNS;
     }
 
+    public static Map<String, String> loadDNSRecords() {
+        Map<String, String> dnsRecords = new HashMap<>();
+
+        try (BufferedReader br = new BufferedReader(new FileReader("C:\\Users\\estudiante\\IdeaProjects\\servidorDNS\\src\\masterfile.txt"))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                line = line.trim();
+                if (!line.isEmpty() && !line.startsWith(";")) {
+                    String[] parts = line.split("\\s+");
+                    if (parts.length >= 4 && parts[2].equals("A")) {
+                        String domain = parts[0];
+                        String ipAddress = parts[3];
+                        dnsRecords.put(domain, ipAddress);
+                    }
+                }
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        return dnsRecords;
+    }
+
     public static byte[] generateDNSResponse(byte[] msgRequest, int length, Mensaje reqDNS) throws Exception {
         //Res
         ByteArrayOutputStream respuesta = new ByteArrayOutputStream();
@@ -210,23 +233,23 @@ public class DNSReceiver {
         DataInputStream dataInRequest = new DataInputStream(new ByteArrayInputStream(msgRequest));
 
         //Encabezado de la respuesta
-        respuestaIn.writeShort(reqDNS.getId());
-        respuestaIn.writeShort((short) 0b1000000000000000);
-        respuestaIn.writeShort(reqDNS.getQDCOUNT());
-        respuestaIn.writeShort(0);
-        respuestaIn.writeShort(0);
-        //Banderas
+        respuestaIn.writeShort(reqDNS.getId()); //Escribir id de transaccion
+        respuestaIn.writeShort((short) 0b1000000000000000); // colocar banderas
 
-
-        //QDCOUNT, ANCOUNT, NSCOUNT, ARCOUNT
-        respuestaIn.writeShort(reqDNS.getQDCOUNT());
-        respuestaIn.writeShort(1);
-        respuestaIn.writeShort(0);
-        respuestaIn.writeShort(0);
+        respuestaIn.writeShort(reqDNS.getQDCOUNT()); // colocar numero de preguntas
+        respuestaIn.writeShort(1); //Numero de respuestas
+        respuestaIn.writeShort(0);//Numero de NS
+        respuestaIn.writeShort(0); // num registrso adicionales
 
         //Pregunta
         escribirPregunta(respuestaIn,reqDNS.getQNAME());
-        respuestaIn.writeByte(0); //Final de QNAME
+        respuestaIn.writeShort(reqDNS.getQTYPE());
+        respuestaIn.writeShort(reqDNS.getQCLASS());
+
+        //Escribir respuesta
+        Map<String, String> dnsRR = loadDNSRecords(); //Obtener lista con los dominios y sus direcciones ip
+        dnsRR.forEach((dominio, ipAddress) -> System.out.println(dominio + " -> " + ipAddress));
+        escribirRR( respuestaIn, reqDNS.getQNAME(),reqDNS.getQTYPE(), dnsRR);
 
 
         return respuesta.toByteArray();
@@ -240,15 +263,53 @@ public class DNSReceiver {
             dataOutputStream.writeByte(dominioBytes.length);
             dataOutputStream.write(dominioBytes);
         }
+        dataOutputStream.writeByte(0); //Final de QNAME
+    }
 
-        dataOutputStream.writeShort(1); //Tipo de registro A
+    private static void escribirRR(DataOutputStream dataOutputStream, String qname, short qtype, Map<String, String> masterFileRecords) throws Exception {
+        for (Map.Entry<String, String> entry : masterFileRecords.entrySet()) {
+            String dominio = entry.getKey();
+            String dirIP = entry.getValue();
 
-        dataOutputStream.writeShort(1); //Clase va a ser IN
+            // Check if the query domain matches the domain in the master file
+            if (dominio.equalsIgnoreCase(qname)) {
+                // Write the dominio name
+                escribirPregunta(dataOutputStream, dominio);
+
+                // Write the type and class
+                dataOutputStream.writeShort(qtype);
+                dataOutputStream.writeShort((short) 1); // Class: IN
+
+                // Write the TTL (Time to Live)
+                dataOutputStream.writeInt(3600); // Assuming a TTL of 1 hour
+
+                // Dividir la cadena de la dirección IP en octetos
+                String[] octetos = dirIP.split("\\.");
+
+                // Crear una matriz de bytes para almacenar la dirección IP
+                byte[] ipBytes = new byte[4];
+
+                // Convertir cada octeto de la dirección IP en un entero y luego en un byte
+                for (int i = 0; i < 4; i++) {
+                    int octeto = Integer.parseInt(octetos[i]);
+                    ipBytes[i] = (byte) octeto;
+                }
+
+                // Escribir la longitud de la matriz de bytes en el flujo de salida como un valor corto (2 bytes)
+                dataOutputStream.writeShort(ipBytes.length);
+
+                // Escribir la matriz de bytes que representa la dirección IP en el flujo de salida
+                dataOutputStream.write(ipBytes);
+            }else{
+                
+            }
+        }
     }
 
     public static void sendDNSResponse(byte[] responseData, InetAddress clientAddress, int clientPort, DatagramSocket socket) {
         try {
             System.out.println("Enviando Respuesta");
+            Mensaje respuesta = processDNSResponse(responseData, responseData.length);
             DatagramPacket packet = new DatagramPacket(responseData, responseData.length, clientAddress, clientPort);
             socket.send(packet);
         } catch (Exception e) {
