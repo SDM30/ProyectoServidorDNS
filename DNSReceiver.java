@@ -344,12 +344,12 @@ public class DNSReceiver {
             DatagramPacket respDatagrama = new DatagramPacket(repuestaResolutor, repuestaResolutor.length);
             socket.receive(respDatagrama);
             System.out.println("consulta recibida!!!!");
+
+
+            DatagramPacket respHost = new DatagramPacket(respDatagrama.getData(), respDatagrama.getLength(), clientAddress, clientPort);
+            socketUDP.send(respHost);
+            System.out.println("respuesta enviada al HOST");
             processDNSResponse(repuestaResolutor, repuestaResolutor.length);
-
-           DatagramPacket respHost = new DatagramPacket(respDatagrama.getData(), respDatagrama.getLength(), clientAddress, clientPort);
-           socketUDP.send(respHost);
-           System.out.println("respuesta enviada al HOST");
-
 
         }catch(IOException e){
             e.printStackTrace();
