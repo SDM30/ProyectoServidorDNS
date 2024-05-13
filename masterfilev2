@@ -1,0 +1,14 @@
+; Archivo de zona maestra de ejemplo
+; Comentarios comienzan con punto y coma
+
+javeriana.edu.co   IN  A  10.26.1.144
+google.com IN A 142.250.78.14
+facebook.com IN A 57.144.114.1
+medium.com IN A 162.159.152.4
+yahoo.com IN A 98.137.11.164
+youtube.com IN A 142.250.78.110
+instagram.com IN A 57.144.114.34
+wikipedia.com IN A 208.80.154.232
+redditt.com IN A 76.223.54.146
+cisco.com IN A 72.163.4.185
+canva.com IN A 104.16.103.112
