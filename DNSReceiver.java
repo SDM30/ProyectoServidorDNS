@@ -138,6 +138,7 @@ public class DNSReceiver {
             int firstTwoBits = (firstBytes & 0b11000000) >>> 6;
 
             ByteArrayOutputStream label = new ByteArrayOutputStream();
+            //guarda nombre de dominio con direccion ip
             Map<String, String> domainToIp = new HashMap<>();
 
             for(int i = 0; i < ANCOUNT; i++) {
@@ -196,11 +197,15 @@ public class DNSReceiver {
                     System.out.println("It's a label");
                 }
 
-                //firstBytes = dataInputStream.readByte();
-                //firstTwoBits = (firstBytes & 0b11000000) >>> 6;
+                if(ANCOUNT > 1){
+                    firstBytes = dataInputStream.readByte();
+                    firstTwoBits = (firstBytes & 0b11000000) >>> 6;
+                }
+
             }
 
             domainToIp.forEach((key, value) -> System.out.println(key + " : " + value));
+            reqDNS.setDominioIp(domainToIp);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -332,6 +337,19 @@ public class DNSReceiver {
         }
     }
 
+    public static void escribirRegistroMasterFile(String dominio, String ip) {
+        try {
+            // Escribir el registro en el archivo maestro
+            BufferedWriter writer = new BufferedWriter(new FileWriter("C:\\Users\\estudiante\\IdeaProjects\\servidorDNS\\src\\masterfile.txt", true));
+
+            writer.write(dominio + " IN A " + ip+"\n");
+            writer.close();
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
     public static void resolutorForaneo(byte[] msgRequest, InetAddress clientAddress, int clientPort, DatagramSocket socketUDP){
         byte[] repuestaResolutor;
         try (DatagramSocket socket = new DatagramSocket()) {
@@ -349,7 +367,19 @@ public class DNSReceiver {
             DatagramPacket respHost = new DatagramPacket(respDatagrama.getData(), respDatagrama.getLength(), clientAddress, clientPort);
             socketUDP.send(respHost);
             System.out.println("respuesta enviada al HOST");
-            processDNSResponse(repuestaResolutor, repuestaResolutor.length);
+            Mensaje respuestaAlCliente = processDNSResponse(repuestaResolutor, repuestaResolutor.length);
+
+            String dominio = null;
+            String ip = null;
+
+            // Iterar sobre las entradas del mapa
+            for (Map.Entry<String, String> entry : respuestaAlCliente.getDominioIp().entrySet()) {
+                // Obtener la clave y el valor de la entrada actual
+                ip = entry.getKey();
+                dominio = entry.getValue();
+            }
+
+            escribirRegistroMasterFile(dominio, ip);
 
         }catch(IOException e){
             e.printStackTrace();
